@@ -8,9 +8,20 @@ window.onload = function init() {
 var GF = function () {
     // Vars relative to the canvas
     var canvas, ctx, w, h;
+    
+    var button;
+    var analyticsCanvas;
+    var analyticsCtx;
+    var analysisDiv;
+    var gridBox;
+    var gridBoxDiv;
+    
 
     // vars for handling inputs
     var inputStates = {};
+    inputStates.analyticsToggle = 0;
+    inputStates.divisor = 25;
+    inputStates.grid = false;
 
     // game states
     var gameStates = {
@@ -27,17 +38,19 @@ var GF = function () {
     // The monster !
     var monster = {
         dead: false,
+        display: true,
         x: 10,
         y: 10,
         width: 50,
         height: 50,
         speed: 100, // pixels/s this time !
-        lives: 3
+        lives: 5
     };
 
     // array of balls to animate
+    var initialNB = 2;
     var ballArray = [];
-    var nbBalls = 2;
+    var nbBalls = initialNB;
     var goodBalls = nbBalls;
 
     // clears the canvas content
@@ -98,25 +111,38 @@ var GF = function () {
 
         switch (currentGameState) {
             case gameStates.gameRunning:
+                
+                if(monster.display) {
+                    // draw the monster
+                    drawMyMonster(monster.x, monster.y);
 
-                // draw the monster
-                drawMyMonster(monster.x, monster.y);
-
-                // Check inputs and move the monster
-                updateMonsterPosition(delta);
+                    // Check inputs and move the monster
+                    updateMonsterPosition(delta);
+                };
 
                 // update and draw balls
                 updateBalls(delta);
+                
+                if(monster.display) {
+                    // display Score
+                    displayScore();
 
-                // display Score
-                displayScore();
+                    // When good balls < 0 go to next level
 
-                // When good balls < 0 go to next level
-
-                if (goodBalls <= 0) {
-                    goToNextLevel();
+                    if (goodBalls <= 0) {
+                        goToNextLevel();
+                    }
                 }
-
+                
+                if(inputStates.analyticsToggle != 0) {
+                    if(inputStates.analyticsToggle === 1) {
+                        function callbackAnalytics() {
+                            updateAnalytics(analyticsCanvas, analysisCtx, ballArray, analysisDiv, 'momentum', inputStates, w, h);
+                        };
+                        setTimeout(callbackAnalytics,4);
+                    }
+                }
+                
                 break;
             case gameStates.mainMenu:
                 // TO DO !
@@ -143,7 +169,7 @@ var GF = function () {
     function startNewGame() {
         monster.dead = false;
         currentLevel = 1;
-        nbBalls = 2;
+        nbBalls = initialNB;
         goodBalls = nbBalls;
         createBalls(nbBalls);
         currentGameState = gameStates.gameRunning;
@@ -151,8 +177,12 @@ var GF = function () {
 
     function goToNextLevel() {
         currentLevel++;
-        // Add two balls per level
-        nbBalls += 2;
+        // Add one pair of balls per level
+        nbBalls += 1;
+        // Add one life every two levels
+        if(currentLevel%2 === 0) {
+            monster.lives++;
+        }
         goodBalls = nbBalls;
         createBalls(nbBalls);
     }
@@ -165,6 +195,7 @@ var GF = function () {
         ctx.fillText("Lives: " + monster.lives, 300, 90);
         ctx.restore();
     }
+    
     function updateMonsterPosition(delta) {
         monster.speedX = monster.speedY = 0;
         // check inputStates
@@ -210,29 +241,31 @@ var GF = function () {
 
                 // 2) test if the ball collides with a wall
                 testCollisionWithWalls(ball, w, h);
-
-                // Test if the monster collides
-                if (circRectsOverlap(monster.x, monster.y,
-                        monster.width, monster.height,
-                        ball.x, ball.y, ball.radius)) {
-                    if(ball.set === 0) {
-                        ball.color = 'green';
-                        goodBalls--;
-                        console.log(goodBalls + " remaining")
-                    } else {
-                        //change the color of the ball
-                        ball.color = 'red';
-                        monster.lives -= 1;
-                        if(monster.lives <= 0) {
-                            monster.dead = true;
-                            monster.lives = 3;
+                
+                if(monster.display) {
+                    // Test if the monster collides
+                    if (circRectsOverlap(monster.x, monster.y,
+                            monster.width, monster.height,
+                            ball.x, ball.y, ball.radius)) {
+                        if(ball.set === 0) {
+                            ball.color = 'green';
+                            goodBalls--;
+                        } else {
+                            //change the color of the ball
+                            ball.color = 'red';
+                            monster.lives -= 1;
+                            if(monster.lives <= 0) {
+                                monster.dead = true;
+                                monster.lives = 3;
+                            }
                         }
+                        ball.dead = true;
+                        ball.momentum = 0;
+                        // Here, a sound effect greatly improves
+                        // the experience!
+                        plopSound.play();
                     }
-                    ball.dead = true;
-                    // Here, a sound effect greatly improves
-                    // the experience!
-                    plopSound.play();
-                }
+                };
 
                 // 3) draw the ball
                 ball.draw(ctx);
@@ -245,7 +278,7 @@ var GF = function () {
     function createBalls(numberOfBalls) {
         // Start from an empty array
         ballArray = [];
-        for (var set = 0; set < 2; set++) {
+        for (var set = 0; set < 2; set++) { 
             for (var i = 0; i < numberOfBalls; i++) {
                 // Create a ball with random position and speed. 
                 // You can change the radius
@@ -257,16 +290,22 @@ var GF = function () {
                                       20*(set+1),set); // radius
                 // Do not create a ball on the player. We augmented the ball radius 
                 // to ensure the ball is created far from the monster. 
-                if (!circRectsOverlap(monster.x, monster.y,
+                if ((!circRectsOverlap(monster.x, monster.y,
                         monster.width, monster.height,
-                        ball.x, ball.y, ball.radius * 3)) {
+                        ball.x, ball.y, ball.radius * 3)) || (!monster.display)) {
                     // Add it to the array
                     ballArray[i+(set * numberOfBalls)] = ball;
                 } else {
                     i--;
-                }
-            }
-        }
+                };
+            };
+        };
+        for(var j = 0; j<numberOfBalls*2; j++) {
+            if(!ballArray[j] instanceof Ball) {
+                console.log("Ball " + (j+1) + " unsuccessful. Restarting ball generation.");
+                createBalls(numberOfBalls);
+            };
+        };
     }
 
     function loadAssets(callback) {
@@ -300,9 +339,18 @@ var GF = function () {
         ctx = canvas.getContext('2d');
         // default police for text 
         ctx.font = "20px Arial";
+        
+        button = document.querySelector("#analyticsToggle");
+        analyticsCanvas = document.querySelector('#analysisCanvas');
+        analysisCtx = analyticsCanvas.getContext('2d');
+        analysisDiv = document.querySelector("#analysisDiv");
+        gridBox = document.querySelector("#gridBox");
+        gridBoxDiv = document.querySelector("#gridBoxDiv");
+        
+        monsterDisplayButton = document.querySelector("#monsterDisplayToggle");
 
         // Create the different key and mouse listeners
-        addListeners(inputStates, canvas);
+        addListeners(inputStates, canvas, button, analysisDiv, analyticsCanvas, analysisCtx, gridBox, gridBoxDiv, ballArray, monsterDisplayButton, monster);
         
         // Display startup screen
         
@@ -331,6 +379,6 @@ var GF = function () {
     return {
         start: start
     };
-};
+}
 
 

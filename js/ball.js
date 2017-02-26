@@ -8,6 +8,7 @@
         this.color = 'rgba(0,0,0,0.5)';
         this.dead = false;
         this.set = ballSet;
+        this.mass = (4/3) * Math.PI * Math.pow(this.radius/10, 3);
 
         this.draw = function (ctx) {
             ctx.save();
